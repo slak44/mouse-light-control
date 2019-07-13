@@ -1,0 +1,5 @@
+cmake-build-debug/
+*.pcapng
+*data
+.idea/workspace.xml
+.idea/misc.xml
