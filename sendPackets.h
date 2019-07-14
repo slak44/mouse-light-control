@@ -46,6 +46,11 @@ struct RGBColor {
   Byte blue = 0x00;
 };
 
+constexpr RGBColor RED = {0xff, 0x00, 0x00};
+constexpr RGBColor GREEN = {0x00, 0xff, 0x00};
+constexpr RGBColor BLUE = {0x00, 0x00, 0xff};
+constexpr RGBColor WHITE = {0xff, 0xff, 0xff};
+
 enum Intensity : Byte { OFF = 0x00, LOW = 0x01, MEDIUM = 0x02, HIGH = 0x03 };
 
 struct PacketPayload {
@@ -171,7 +176,6 @@ void trace(libusb_device_handle* handle, Intensity intensity) {
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[3],
                                             .byte4 = 0x06,
-                                            .color = {0x00, 0xff, 0x00},
                                             // These magic bytes make it a "trace" pattern
                                             .lightKind = {0x06, 0x08, 0x00}});
   sendControlTransfer(
@@ -183,12 +187,12 @@ void trace(libusb_device_handle* handle, Intensity intensity) {
 
 enum Speed : Byte { SLOW = 0x08, NORMAL = 0x05, FAST = 0x02 };
 
-void breathing(libusb_device_handle* handle, Intensity intensity, Speed speed) {
+void breathing(libusb_device_handle* handle, RGBColor color, Intensity intensity, Speed speed) {
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[3],
                                             .byte4 = 0x06,
-                                            .color = {0x00, 0x00, 0xff},
+                                            .color = color,
                                             // These magic bytes make it a "breathing" pattern
                                             .lightKind = {0x01, speed, 0x04}});
   sendControlTransfer(
@@ -199,7 +203,7 @@ void breathing(libusb_device_handle* handle, Intensity intensity, Speed speed) {
 }
 
 void sendLightPackets(libusb_device_handle* handle) {
-  breathing(handle, LOW, FAST);
+  breathing(handle, WHITE, HIGH, FAST);
   sleep(3);
   turnOff(handle);
 }
