@@ -40,6 +40,14 @@ enum ResetSubtypes : Byte {
   REFRESH_LIGHT_STATE = 0x02
 };
 
+struct RGBColor {
+  Byte red = 0x00;
+  Byte green = 0x00;
+  Byte blue = 0x00;
+};
+
+enum Intensity : Byte { OFF = 0x00, LOW = 0x01, MEDIUM = 0x02, HIGH = 0x03 };
+
 struct PacketPayload {
   // Appears to always be 0x02
   // Possibly report count? Maybe current mouse profile?
@@ -62,18 +70,22 @@ struct PacketPayload {
 
   // Unknown byte
   // 0x02, 0x01, 0x06, 0x00, 0x04
+  // Might be a tag specifying what the following bytes represent
   Byte byte4 = 0x00;
   // Unknown bytes
   // Might be RGB color, were never seen to differ from 0
   Byte bytes567[3] = {0x00, 0x00, 0x00};
-  // Unknown bytes
-  // Might be RGB color
-  // Seen filled with 0x00, 0x02 and 0xff
-  Byte bytes8910[3] = {0x00, 0x00, 0x00};
-  // Unknown bytes
-  // Might be some kind of bitset-ish config
-  // Seen either zero'd or as 0x01 0x08 0x04
-  Byte bytes111213[3] = {0x00, 0x00, 0x00};
+  // Specifies either light color, intensity, or neither (zero'd)
+  union {
+    RGBColor color = {0x00, 0x00, 0x00};
+    struct {
+      Intensity intensity;
+      Byte : 8;
+      Byte : 8;
+    };
+  };
+  // Magic bytes for what kind of light to set on
+  Byte lightKind[3] = {0x00, 0x00, 0x00};
   // Unknown bytes
   // Never seen differ from zero; likely to just be struct padding
   Byte byte14 = 0x00;
@@ -115,67 +127,80 @@ void turnOff(libusb_device_handle* handle) {
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[1],
                                             .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
+                                            .color = {0xff, 0x00, 0x00},
+                                            .lightKind = {0x01, 0x08, 0x04}});
   sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[2], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[2], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
   sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .bytes8910 = {0x00, 0xff, 0x00}});
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .color = {0x00, 0xff, 0x00}});
   sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .bytes8910 = {0xff, 0x00, 0x00}});
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .color = {0xff, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[5],
                                             .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
+                                            .color = {0xff, 0x00, 0x00},
+                                            .lightKind = {0x01, 0x08, 0x04}});
   sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[6], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[6], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[7],
                                             .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
+                                            .color = {0xff, 0x00, 0x00},
+                                            .lightKind = {0x01, 0x08, 0x04}});
   sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[8], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[8], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[9],
                                             .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
+                                            .color = {0xff, 0x00, 0x00},
+                                            .lightKind = {0x01, 0x08, 0x04}});
   sendControlTransfer(
       handle,
-      PacketPayload{
-          .kind = LIGHT_DATA, .subType = lightDataSubtypes[10], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[10], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
 }
 
-enum Intensity : Byte { OFF = 0x00, LOW = 0x01, MEDIUM = 0x02, HIGH = 0x03 };
-
-void traceMedium(libusb_device_handle* handle, Intensity intensity) {
+void trace(libusb_device_handle* handle, Intensity intensity) {
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[3],
                                             .byte4 = 0x06,
-                                            .bytes8910 = {0x00, 0xff, 0x00},
-                                            // These magic bytes make it a trace:
-                                            .bytes111213 = {0x06, 0x08, 0x00}});
+                                            .color = {0x00, 0xff, 0x00},
+                                            // These magic bytes make it a "trace" pattern
+                                            .lightKind = {0x06, 0x08, 0x00}});
   sendControlTransfer(
       handle,
-      PacketPayload{
-          .kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .bytes8910 = {intensity, 0x00, 0x00}});
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
+  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
+  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
+}
+
+enum Speed : Byte { SLOW = 0x08, NORMAL = 0x05, FAST = 0x02 };
+
+void breathing(libusb_device_handle* handle, Intensity intensity, Speed speed) {
+  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
+  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
+                                            .subType = lightDataSubtypes[3],
+                                            .byte4 = 0x06,
+                                            .color = {0x00, 0x00, 0xff},
+                                            // These magic bytes make it a "breathing" pattern
+                                            .lightKind = {0x01, speed, 0x04}});
+  sendControlTransfer(
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
   sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
 }
 
 void sendLightPackets(libusb_device_handle* handle) {
-  traceMedium(handle, HIGH);
-  sleep(2);
+  breathing(handle, LOW, FAST);
+  sleep(3);
   turnOff(handle);
 }
 
