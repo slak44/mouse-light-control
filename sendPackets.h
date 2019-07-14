@@ -216,8 +216,23 @@ void rainbow(libusb_device_handle* handle, Intensity intensity, Speed speed) {
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
 }
 
+void solidColor(libusb_device_handle* handle, RGBColor color, Intensity intensity) {
+  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
+  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
+                                            .subType = lightDataSubtypes[3],
+                                            .byte4 = 0x06,
+                                            .color = color,
+                                            // These magic bytes make it a solid color
+                                            .lightKind = {0x01, 0x00, 0x02}});
+  sendControlTransfer(
+      handle,
+      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
+  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
+  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
+}
+
 void sendLightPackets(libusb_device_handle* handle) {
-  rainbow(handle, LOW, FAST);
+  solidColor(handle, WHITE, HIGH);
   sleep(3);
   turnOff(handle);
 }
