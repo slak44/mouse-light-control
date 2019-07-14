@@ -75,7 +75,7 @@ struct PacketPayload {
   // Seen either zero'd or as 0x01 0x08 0x04
   Byte bytes111213[3] = {0x00, 0x00, 0x00};
   // Unknown bytes
-  // Never seen differ from zero
+  // Never seen differ from zero; likely to just be struct padding
   Byte byte14 = 0x00;
   Byte byte15 = 0x00;
 };
@@ -155,62 +155,27 @@ void turnOff(libusb_device_handle* handle) {
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
 }
 
-void traceMedium(libusb_device_handle* handle, Byte intensity) {
+enum Intensity : Byte { OFF = 0x00, LOW = 0x01, MEDIUM = 0x02, HIGH = 0x03 };
+
+void traceMedium(libusb_device_handle* handle, Intensity intensity) {
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[0], .byte4 = 0x02});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[1],
-                                            .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
-  sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[2], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
                                             .subType = lightDataSubtypes[3],
                                             .byte4 = 0x06,
                                             .bytes8910 = {0x00, 0xff, 0x00},
-                                            // These bytes make it a trace:
+                                            // These magic bytes make it a trace:
                                             .bytes111213 = {0x06, 0x08, 0x00}});
   sendControlTransfer(
       handle,
       PacketPayload{
           .kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .bytes8910 = {intensity, 0x00, 0x00}});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[5],
-                                            .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
-  sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[6], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[7],
-                                            .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
-  sendControlTransfer(
-      handle, PacketPayload{
-                  .kind = LIGHT_DATA, .subType = lightDataSubtypes[8], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[9],
-                                            .byte4 = 0x06,
-                                            .bytes8910 = {0xff, 0x00, 0x00},
-                                            .bytes111213 = {0x01, 0x08, 0x04}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{
-          .kind = LIGHT_DATA, .subType = lightDataSubtypes[10], .byte4 = 0x01, .bytes8910 = {0x02, 0x00, 0x00}});
   sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
   sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
 }
 
 void sendLightPackets(libusb_device_handle* handle) {
-//  for (Byte intensity = 1; intensity < 0xFF; intensity *= 2U) {
-//    std::cout << "Trace intensity " << static_cast<unsigned int>(intensity) << std::endl;
-//    traceMedium(handle, intensity);
-//    sleep(2);
-//  }
+  traceMedium(handle, HIGH);
+  sleep(2);
   turnOff(handle);
 }
 
