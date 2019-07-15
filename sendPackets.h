@@ -21,10 +21,12 @@ enum PayloadKinds : Byte {
   RESET_CONTROL = 0xf1
 };
 
-// LIGHT_DATA subtype values when subType2 is 0x04
+// LIGHT_DATA subtype values when byte3 is 0x04
 constexpr Byte lightDataSubtypes[] = {0x46, 0x49, 0x4f, 0x51, 0x57, 0x59, 0x5f, 0x61, 0x67, 0x69, 0x6f};
-// LIGHT_DATA subtype values when subType2 is 0x00
+// LIGHT_DATA subtype values when byte3 is 0x00
 constexpr Byte lightDataSubtypes2[] = {0x32, 0x38, 0x42 /* ??? */};
+// LIGHT_DATAs subtype when byte4 is 0x02
+constexpr Byte profileSubType = 0x2c;
 
 constexpr Byte beginSubtype = 0x00;
 constexpr Byte endSubtype = 0x01;
@@ -36,7 +38,7 @@ enum ResetSubtypes : Byte {
   BROKEN_PIPE = 0x01,
   // Appears to tell the mouse to refresh the current light animation state
   // Works with all the numbers from 0x02 to 0xff
-  // Might be some sort of ACK, while using subType2 to specify what to acknowledge
+  // Might be some sort of ACK, while using byte3 to specify what to acknowledge
   REFRESH_LIGHT_STATE = 0x02
 };
 
@@ -76,7 +78,7 @@ struct PacketPayload {
   // LIGHT_DATA: 0x04, 0x01, 0x02, 0x03
   // RESET_CONTROL: seen as 0x04, 0x02, 0x10, 0x01, 0x08
   // BEGIN_END_PAYLOAD: seems to always be 0x00
-  Byte subType2 = 0x04;
+  Byte byte3 = 0x04;
 
   // The rest of the bytes seem be 0 for non-LIGHT_DATA packets
 
@@ -90,11 +92,14 @@ struct PacketPayload {
   // Might be RGB color, were never seen to differ from 0
   // Might also be padding; these would align the above to 8 bytes
   Byte bytes567[3] = {0x00, 0x00, 0x00};
-  // Specifies either light color or intensity
+  // Specifies light color, intensity or profile
   union {
     RGBColor color = {0x00, 0x00, 0x00};
     struct {
-      Intensity intensity;
+      union {
+        Intensity intensity;
+        Byte profile;
+      };
       Byte : 8;
       Byte : 8;
     };
@@ -102,7 +107,7 @@ struct PacketPayload {
   // Light pattern
   PatternTypes pattern = NONE;
   // Pattern speed
-  Byte speed;
+  Byte speed = STOP;
   // Only specified if pattern is SECONDARY_PATTERN
   SecondaryPatternTypes realPattern;
   // Unknown bytes
@@ -168,6 +173,13 @@ class PacketSender {
                                       .pattern = SECONDARY_PATTERN,
                                       .speed = speed,
                                       .realPattern = pattern});
+  }
+
+  void setProfile(Byte profile) {
+    // FIXME
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = profileSubType, .byte3 = 0x00, .byte4 = 0x02, .profile = profile});
+    refresh();
   }
 
   void turnOff() {
@@ -243,11 +255,7 @@ class PacketSender {
 
 void sendLightPackets(const DeviceHandle& deviceHandle) {
   auto s = PacketSender(deviceHandle);
-  s.solidColor(WHITE, LOW);
-  sleep(1);
-  s.solidColor(WHITE, HIGH);
-  sleep(1);
-  s.turnOff();
+  s.breathing(RED, HIGH, FAST);
 }
 
 #endif  // USB_SEND_SENDPACKETS_H
