@@ -64,7 +64,7 @@ void usbSetup(libusb_device* dev) {
   iface0ok = claimInterface(dh.getHandle(), 0);
   iface2ok = claimInterface(dh.getHandle(), 2);
   if (iface0ok && iface2ok) {
-    sendLightPackets(dh.getHandle());
+    sendLightPackets(dh);
   }
   releaseInterface(dh.getHandle(), 0);
   releaseInterface(dh.getHandle(), 2);

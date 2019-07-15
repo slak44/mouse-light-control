@@ -54,6 +54,7 @@ constexpr RGBColor RED = {0xff, 0x00, 0x00};
 constexpr RGBColor GREEN = {0x00, 0xff, 0x00};
 constexpr RGBColor BLUE = {0x00, 0x00, 0xff};
 constexpr RGBColor WHITE = {0xff, 0xff, 0xff};
+constexpr RGBColor BLACK = {0x00, 0x00, 0x00};
 
 enum Intensity : Byte { OFF = 0x00, LOW = 0x01, MEDIUM = 0x02, HIGH = 0x03 };
 
@@ -82,9 +83,12 @@ struct PacketPayload {
   // Unknown byte
   // 0x02, 0x01, 0x06, 0x00, 0x04
   // Might be a tag specifying what the following bytes represent
+  // Light data doesn't work if it isn't 0x06, and intensity packets don't work
+  // if it isn't 0x01
   Byte byte4 = 0x00;
   // Unknown bytes
   // Might be RGB color, were never seen to differ from 0
+  // Might also be padding; these would align the above to 8 bytes
   Byte bytes567[3] = {0x00, 0x00, 0x00};
   // Specifies either light color or intensity
   union {
@@ -107,173 +111,143 @@ struct PacketPayload {
   Byte byte15 = 0x00;
 };
 
-template <size_t DATA_SIZE = 16>
-void sendControlTransfer(libusb_device_handle* handle, Byte data[]) {
-  int res = libusb_control_transfer(
-      handle,
-      0x21,    // bmRequestType (host to device)
-      0x09,    // bRequest (set configuration)
-      0x0302,  // wValue (configuration value)
-      0x0002,  // wIndex (specifies the target interface; wireshark captures the packet on interface 0, but this control
-      // transfer is apparently sent on interface 2, and both must be claimed for the transfer to work)
-      data,       // Payload
-      DATA_SIZE,  // wLength, payload size in bytes
-      0           // unlimited timeout
-  );
-  if (res < 0) {
-    std::cerr << "transfer failed: " << libusb_error_name(res) << std::endl;
-    std::cerr << "errno: " << strerror(errno) << std::endl;
-    std::cerr << "tried to write " << DATA_SIZE << std::endl;
+class PacketSender {
+  libusb_device_handle* handle;
+
+ public:
+  explicit PacketSender(const DeviceHandle& handle) : handle(handle.getHandle()) {}
+
+  template <size_t DATA_SIZE = 16>
+  void sendControlTransfer(Byte data[]) {
+    int res = libusb_control_transfer(
+        handle,
+        0x21,    // bmRequestType (host to device)
+        0x09,    // bRequest (set configuration)
+        0x0302,  // wValue (configuration value)
+        0x0002,  // wIndex (specifies the target interface; wireshark captures the packet on interface 0, but this
+                 // control
+        // transfer is apparently sent on interface 2, and both must be claimed for the transfer to work)
+        data,       // Payload
+        DATA_SIZE,  // wLength, payload size in bytes
+        0           // unlimited timeout
+    );
+    if (res < 0) {
+      std::cerr << "transfer failed: " << libusb_error_name(res) << std::endl;
+      std::cerr << "errno: " << strerror(errno) << std::endl;
+      std::cerr << "tried to write " << DATA_SIZE << std::endl;
+    }
   }
-}
 
-template <size_t DATA_SIZE = 16>
-void sendControlTransfer(libusb_device_handle* handle, std::array<unsigned char, DATA_SIZE> data) {
-  sendControlTransfer<DATA_SIZE>(handle, data.data());
-}
+  template <size_t DATA_SIZE = 16>
+  void sendControlTransfer(std::array<unsigned char, DATA_SIZE> data) {
+    sendControlTransfer<DATA_SIZE>(data.data());
+  }
 
-void sendControlTransfer(libusb_device_handle* handle, PacketPayload payload) {
-  sendControlTransfer(handle, reinterpret_cast<Byte*>(&payload));
-}
+  void sendControlTransfer(PacketPayload payload) {
+    static_assert(sizeof(payload) == 16);
+    sendControlTransfer(reinterpret_cast<Byte*>(&payload));
+  }
 
-void turnOff(libusb_device_handle* handle) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[0], .byte4 = 0x02});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[1], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[2], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .color = {0x00, 0xff, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .color = {0xff, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[5], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[6], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[7], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[8], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[9], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[10], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void setIntensity(Intensity intensity) {
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
+  }
 
-void trace(libusb_device_handle* handle, Intensity intensity) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(
-      handle, PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .pattern = TRACE});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void refresh() { sendControlTransfer(PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE}); }
 
-void breathing(libusb_device_handle* handle, RGBColor color, Intensity intensity, Speed speed) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[3],
-                                            .byte4 = 0x06,
-                                            .color = color,
-                                            .pattern = SECONDARY_PATTERN,
-                                            .speed = speed,
-                                            .realPattern = BREATHING});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void setPattern(PatternTypes pattern) {
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .pattern = pattern});
+  }
 
-void rainbow(libusb_device_handle* handle, Intensity intensity, Speed speed) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[3],
-                                            .byte4 = 0x06,
-                                            .pattern = SECONDARY_PATTERN,
-                                            .speed = speed,
-                                            .realPattern = RAINBOW});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void setSecondaryPattern(SecondaryPatternTypes pattern, RGBColor color, Speed speed) {
+    sendControlTransfer(PacketPayload{.kind = LIGHT_DATA,
+                                      .subType = lightDataSubtypes[3],
+                                      .byte4 = 0x06,
+                                      .color = color,
+                                      .pattern = SECONDARY_PATTERN,
+                                      .speed = speed,
+                                      .realPattern = pattern});
+  }
 
-void solidColor(libusb_device_handle* handle, RGBColor color, Intensity intensity) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[3],
-                                            .byte4 = 0x06,
-                                            .color = color,
-                                            .pattern = SECONDARY_PATTERN,
-                                            .realPattern = SOLID_COLOR});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void turnOff() {
+    sendControlTransfer(PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
+    sendControlTransfer(PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[0], .byte4 = 0x02});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[1], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[2], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .color = {0x00, 0xff, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .color = {0xff, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[5], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[6], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[7], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[8], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
+    sendControlTransfer(
+        PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[9], .byte4 = 0x06, .color = {0xff, 0x00, 0x00}});
+    sendControlTransfer(PacketPayload{
+        .kind = LIGHT_DATA, .subType = lightDataSubtypes[10], .byte4 = 0x01, .color = {0x02, 0x00, 0x00}});
+    sendControlTransfer(PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
+    sendControlTransfer(PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
+  }
 
-void wave(libusb_device_handle* handle, Intensity intensity, Speed speed) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(
-      handle,
-      PacketPayload{
-          .kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .pattern = WAVE, .speed = speed});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void trace(Intensity intensity) {
+    setPattern(TRACE);
+    setIntensity(intensity);
+    refresh();
+  }
 
-void reactive(libusb_device_handle* handle, Intensity intensity) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(
-      handle, PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .pattern = REACTIVE});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void breathing(RGBColor color, Intensity intensity, Speed speed) {
+    setSecondaryPattern(BREATHING, color, speed);
+    setIntensity(intensity);
+    refresh();
+  }
 
-void flash(libusb_device_handle* handle, RGBColor color, Intensity intensity, Speed speed) {
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = beginSubtype});
-  sendControlTransfer(handle, PacketPayload{.kind = LIGHT_DATA,
-                                            .subType = lightDataSubtypes[3],
-                                            .byte4 = 0x06,
-                                            .color = color,
-                                            .pattern = SECONDARY_PATTERN,
-                                            .speed = speed,
-                                            .realPattern = FLASH});
-  sendControlTransfer(
-      handle,
-      PacketPayload{.kind = LIGHT_DATA, .subType = lightDataSubtypes[4], .byte4 = 0x01, .intensity = intensity});
-  sendControlTransfer(handle, PacketPayload{.kind = RESET_CONTROL, .subType = REFRESH_LIGHT_STATE});
-  sendControlTransfer(handle, PacketPayload{.kind = BEGIN_END_PAYLOAD, .subType = endSubtype});
-}
+  void rainbow(Intensity intensity, Speed speed) {
+    setSecondaryPattern(RAINBOW, BLACK, speed);
+    setIntensity(intensity);
+    refresh();
+  }
 
-void sendLightPackets(libusb_device_handle* handle) {
-  wave(handle, HIGH, FAST);
-  sleep(3);
-  turnOff(handle);
+  void solidColor(RGBColor color, Intensity intensity) {
+    setSecondaryPattern(SOLID_COLOR, color, STOP);
+    setIntensity(intensity);
+    refresh();
+  }
+
+  void wave(Intensity intensity, Speed speed) {
+    sendControlTransfer(PacketPayload{
+        .kind = LIGHT_DATA, .subType = lightDataSubtypes[3], .byte4 = 0x06, .pattern = WAVE, .speed = speed});
+    setIntensity(intensity);
+    refresh();
+  }
+
+  void reactive(Intensity intensity) {
+    setPattern(REACTIVE);
+    setIntensity(intensity);
+    refresh();
+  }
+
+  void flash(RGBColor color, Intensity intensity, Speed speed) {
+    setSecondaryPattern(FLASH, color, speed);
+    setIntensity(intensity);
+    refresh();
+  }
+};
+
+void sendLightPackets(const DeviceHandle& deviceHandle) {
+  auto s = PacketSender(deviceHandle);
+  s.solidColor(WHITE, LOW);
+  sleep(1);
+  s.solidColor(WHITE, HIGH);
+  sleep(1);
+  s.turnOff();
 }
 
 #endif  // USB_SEND_SENDPACKETS_H
