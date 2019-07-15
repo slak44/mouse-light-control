@@ -124,17 +124,16 @@ class PacketSender {
 
   template <size_t DATA_SIZE = 16>
   void sendControlTransfer(Byte data[]) {
-    int res = libusb_control_transfer(
-        handle,
-        0x21,    // bmRequestType (host to device)
-        0x09,    // bRequest (set configuration)
-        0x0302,  // wValue (configuration value)
-        0x0002,  // wIndex (specifies the target interface; wireshark captures the packet on interface 0, but this
-                 // control
-        // transfer is apparently sent on interface 2, and both must be claimed for the transfer to work)
-        data,       // Payload
-        DATA_SIZE,  // wLength, payload size in bytes
-        0           // unlimited timeout
+    int res = libusb_control_transfer(handle,
+                                      0x21,    // bmRequestType (host to device)
+                                      0x09,    // bRequest (set configuration)
+                                      0x0302,  // wValue (configuration value)
+                                      0x0002,  // wIndex (specifies the target interface; wireshark captures the packet
+                                               // on interface 0, but this control transfer is apparently sent on
+                                               // interface 2, and both must be claimed for the transfer to work)
+                                      data,    // Payload
+                                      DATA_SIZE,  // wLength, payload size in bytes
+                                      0           // unlimited timeout
     );
     if (res < 0) {
       std::cerr << "transfer failed: " << libusb_error_name(res) << std::endl;
